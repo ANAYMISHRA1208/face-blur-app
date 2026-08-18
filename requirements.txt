@@ -3,8 +3,10 @@
 
 streamlit
 opencv-python-headless
-mediapipe<1.0.0
+mediapipe
 numpy
 moviepy
 Pillow
 imageio-ffmpeg
+dlib-bin
+face_recognition
