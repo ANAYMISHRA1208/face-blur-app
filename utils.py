@@ -1,8 +1,6 @@
 """
 utils.py
-Helper functions for face detection, blurring, and video/audio processing.
-Kept dependency-light and side-effect free so both app.py and tracker.py
-can reuse them without circular imports.
+Helper functions for face detection, blurring, and video/audio processing using OpenCV.
 """
 
 import os
@@ -10,65 +8,39 @@ from typing import List, Tuple
 
 import cv2
 import numpy as np
-import mediapipe as mp
 
-# Compatibility check for Mediapipe versions
-if hasattr(mp, "solutions"):
-    mp_face_detection = mp.solutions.face_detection
-else:
-    from mediapipe.python.solutions import face_detection as mp_face_detection
+# Load OpenCV built-in Haar Cascade Face Detector
+face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
 
 
 def get_mediapipe_detector(min_confidence: float = 0.5, model_selection: int = 1):
     """
-    Create a MediaPipe FaceDetection object.
-    model_selection=0 -> short-range model (faces within ~2 meters, e.g. selfies)
-    model_selection=1 -> full-range model (better for group photos / video, faces farther away)
+    Dummy wrapper to keep compatibility with app.py & tracker.py
     """
-    return mp_face_detection.FaceDetection(
-        min_detection_confidence=min_confidence,
-        model_selection=model_selection,
-    )
+    return face_cascade
 
 
 def detect_faces_mediapipe(frame: np.ndarray, detector) -> List[Tuple[int, int, int, int]]:
     """
-    Detect faces in a BGR frame using MediaPipe.
+    Detect faces in a BGR frame using OpenCV Haar Cascade.
     Returns a list of bounding boxes as (x, y, w, h) in pixel coordinates.
     """
     if frame is None or frame.size == 0:
         return []
 
-    h, w = frame.shape[:2]
-    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    results = detector.process(rgb_frame)
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    faces = detector.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
 
     boxes = []
-    if results.detections:
-        for detection in results.detections:
-            bbox = detection.location_data.relative_bounding_box
-            x = int(bbox.xmin * w)
-            y = int(bbox.ymin * h)
-            box_w = int(bbox.width * w)
-            box_h = int(bbox.height * h)
-
-            # Clamp to frame boundaries — MediaPipe can return slightly
-            # out-of-frame boxes near edges, which would crash a crop otherwise.
-            x = max(0, x)
-            y = max(0, y)
-            box_w = min(box_w, w - x)
-            box_h = min(box_h, h - y)
-
-            if box_w > 0 and box_h > 0:
-                boxes.append((x, y, box_w, box_h))
+    for (x, y, w, h) in faces:
+        boxes.append((int(x), int(y), int(w), int(h)))
 
     return boxes
 
 
 def expand_box(box: Tuple[int, int, int, int], frame_shape, margin_ratio: float = 0.15) -> Tuple[int, int, int, int]:
     """
-    Slightly enlarge a bounding box so the blur fully covers hair/chin/ears,
-    then clamp the result back to the frame bounds.
+    Slightly enlarge a bounding box so the blur fully covers hair/chin/ears.
     """
     x, y, w, h = box
     frame_h, frame_w = frame_shape[:2]
@@ -86,8 +58,7 @@ def expand_box(box: Tuple[int, int, int, int], frame_shape, margin_ratio: float 
 
 def blur_region(frame: np.ndarray, box: Tuple[int, int, int, int], intensity: str = "high") -> np.ndarray:
     """
-    Apply Gaussian blur to a rectangular region of a frame (in place + returned).
-    intensity: "low" | "medium" | "high" controls the kernel size.
+    Apply Gaussian blur to a rectangular region of a frame.
     """
     x, y, w, h = box
     if w <= 0 or h <= 0:
@@ -100,7 +71,6 @@ def blur_region(frame: np.ndarray, box: Tuple[int, int, int, int], intensity: st
     kernel_map = {"low": 15, "medium": 35, "high": 55}
     k = kernel_map.get(intensity, 45)
 
-    # Scale kernel with face size so small/far faces still get a strong blur
     k = max(k, (min(w, h) // 2) | 1)
     if k % 2 == 0:
         k += 1
@@ -130,13 +100,12 @@ def pixelate_region(frame: np.ndarray, box: Tuple[int, int, int, int], blocks: i
 
 def merge_audio_with_video(original_video_path: str, processed_video_no_audio_path: str, final_output_path: str) -> bool:
     """
-    Attach the original video's audio track onto the newly processed (blurred,
-    currently silent) video, using moviepy.
-
-    Returns True if an audio track was found and merged, False if the source
-    had no audio (the silent processed video is still exported as the final file).
+    Attach the original video's audio track onto the newly processed video.
     """
-    from moviepy.editor import VideoFileClip
+    try:
+        from moviepy.editor import VideoFileClip
+    except ImportError:
+        from moviepy.video.io.VideoFileClip import VideoFileClip
 
     original_clip = None
     processed_clip = None
