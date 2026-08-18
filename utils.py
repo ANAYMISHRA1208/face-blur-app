@@ -12,7 +12,11 @@ import cv2
 import numpy as np
 import mediapipe as mp
 
-mp_face_detection = mp.solutions.face_detection
+# Compatibility check for Mediapipe versions
+if hasattr(mp, "solutions"):
+    mp_face_detection = mp.solutions.face_detection
+else:
+    from mediapipe.python.solutions import face_detection as mp_face_detection
 
 
 def get_mediapipe_detector(min_confidence: float = 0.5, model_selection: int = 1):
