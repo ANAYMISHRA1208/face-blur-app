@@ -1,0 +1,16 @@
+# Face Blur Studio — dependencies
+# Tested with Python 3.10 / 3.11
+
+streamlit==1.38.0
+opencv-python==4.10.0.84
+mediapipe==0.10.14
+numpy==1.26.4
+moviepy==1.0.3
+Pillow==10.4.0
+imageio-ffmpeg==0.5.1
+
+# --- dlib / face_recognition ---
+# dlib must build successfully BEFORE face_recognition will install.
+# On Windows this usually needs CMake + a C++ build toolchain (see README).
+dlib==19.24.6
+face_recognition==1.3.0
