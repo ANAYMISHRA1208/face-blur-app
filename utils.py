@@ -12,12 +12,22 @@ import numpy as np
 # Load OpenCV built-in Haar Cascade Face Detector
 face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
 
+# Wrapper to prevent AttributeError: 'cv2.CascadeClassifier' object has no attribute 'close'
+class DummyDetector:
+    def __init__(self, cascade):
+        self.cascade = cascade
+
+    def detectMultiScale(self, *args, **kwargs):
+        return self.cascade.detectMultiScale(*args, **kwargs)
+
+    def close(self):
+        pass  # OpenCV classifier doesn't need closing
+
+detector_instance = DummyDetector(face_cascade)
+
 
 def get_mediapipe_detector(min_confidence: float = 0.5, model_selection: int = 1):
-    """
-    Dummy wrapper to keep compatibility with app.py & tracker.py
-    """
-    return face_cascade
+    return detector_instance
 
 
 def detect_faces_mediapipe(frame: np.ndarray, detector) -> List[Tuple[int, int, int, int]]:
@@ -39,9 +49,6 @@ def detect_faces_mediapipe(frame: np.ndarray, detector) -> List[Tuple[int, int, 
 
 
 def expand_box(box: Tuple[int, int, int, int], frame_shape, margin_ratio: float = 0.15) -> Tuple[int, int, int, int]:
-    """
-    Slightly enlarge a bounding box so the blur fully covers hair/chin/ears.
-    """
     x, y, w, h = box
     frame_h, frame_w = frame_shape[:2]
 
@@ -57,9 +64,6 @@ def expand_box(box: Tuple[int, int, int, int], frame_shape, margin_ratio: float 
 
 
 def blur_region(frame: np.ndarray, box: Tuple[int, int, int, int], intensity: str = "high") -> np.ndarray:
-    """
-    Apply Gaussian blur to a rectangular region of a frame.
-    """
     x, y, w, h = box
     if w <= 0 or h <= 0:
         return frame
@@ -81,9 +85,6 @@ def blur_region(frame: np.ndarray, box: Tuple[int, int, int, int], intensity: st
 
 
 def pixelate_region(frame: np.ndarray, box: Tuple[int, int, int, int], blocks: int = 10) -> np.ndarray:
-    """
-    Alternative anonymization style — mosaic/pixelate instead of Gaussian blur.
-    """
     x, y, w, h = box
     if w <= 0 or h <= 0:
         return frame
@@ -99,9 +100,6 @@ def pixelate_region(frame: np.ndarray, box: Tuple[int, int, int, int], blocks: i
 
 
 def merge_audio_with_video(original_video_path: str, processed_video_no_audio_path: str, final_output_path: str) -> bool:
-    """
-    Attach the original video's audio track onto the newly processed video.
-    """
     try:
         from moviepy.editor import VideoFileClip
     except ImportError:
@@ -140,7 +138,6 @@ def merge_audio_with_video(original_video_path: str, processed_video_no_audio_pa
 
 
 def cleanup_temp_files(*paths: str) -> None:
-    """Safely delete temporary files, ignoring missing files or lock errors."""
     for p in paths:
         try:
             if p and os.path.exists(p):
