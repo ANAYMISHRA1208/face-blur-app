@@ -1,6 +1,6 @@
 """
 utils.py
-Helper functions for face detection, blurring, and video/audio processing using OpenCV.
+Helper functions for face detection, blurring, and video/audio processing.
 """
 
 import os
@@ -8,42 +8,63 @@ from typing import List, Tuple
 
 import cv2
 import numpy as np
+import mediapipe as mp
 
-# Load OpenCV built-in Haar Cascade Face Detector
-face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
 
-# Wrapper to prevent AttributeError: 'cv2.CascadeClassifier' object has no attribute 'close'
-class DummyDetector:
-    def __init__(self, cascade):
-        self.cascade = cascade
+class MediaPipeFaceDetectorWrapper:
+    def __init__(self, min_confidence=0.5, model_selection=1):
+        # MediaPipe solution fallback setup
+        try:
+            self.mp_face = mp.solutions.face_detection
+        except AttributeError:
+            from mediapipe.python.solutions import face_detection as mp_face
+            self.mp_face = mp_face
+            
+        self.detector = self.mp_face.FaceDetection(
+            min_detection_confidence=min_confidence,
+            model_selection=model_selection
+        )
 
-    def detectMultiScale(self, *args, **kwargs):
-        return self.cascade.detectMultiScale(*args, **kwargs)
+    def process(self, image):
+        return self.detector.process(image)
 
     def close(self):
-        pass  # OpenCV classifier doesn't need closing
-
-detector_instance = DummyDetector(face_cascade)
+        if hasattr(self.detector, 'close'):
+            self.detector.close()
 
 
 def get_mediapipe_detector(min_confidence: float = 0.5, model_selection: int = 1):
-    return detector_instance
+    return MediaPipeFaceDetectorWrapper(min_confidence, model_selection)
 
 
 def detect_faces_mediapipe(frame: np.ndarray, detector) -> List[Tuple[int, int, int, int]]:
     """
-    Detect faces in a BGR frame using OpenCV Haar Cascade.
+    Detect faces in a BGR frame using MediaPipe.
     Returns a list of bounding boxes as (x, y, w, h) in pixel coordinates.
     """
     if frame is None or frame.size == 0:
         return []
 
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    faces = detector.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
+    h, w = frame.shape[:2]
+    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    results = detector.process(rgb_frame)
 
     boxes = []
-    for (x, y, w, h) in faces:
-        boxes.append((int(x), int(y), int(w), int(h)))
+    if results and results.detections:
+        for detection in results.detections:
+            bbox = detection.location_data.relative_bounding_box
+            x = int(bbox.xmin * w)
+            y = int(bbox.ymin * h)
+            box_w = int(bbox.width * w)
+            box_h = int(bbox.height * h)
+
+            x = max(0, x)
+            y = max(0, y)
+            box_w = min(box_w, w - x)
+            box_h = min(box_h, h - y)
+
+            if box_w > 0 and box_h > 0:
+                boxes.append((x, y, box_w, box_h))
 
     return boxes
 
